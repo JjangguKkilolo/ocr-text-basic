@@ -26,7 +26,7 @@ DATE = re.compile(r"(?:19|20)\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}\s
 TERM_DATE = re.compile(r"(?:19|20)\d{2}\s*[./\-]\s*\d{1,2}")
 EDGE = ":：|,;()[]"
 BUSINESS_NUMBER = re.compile(r"\d{3}-\d{2}-\d{5}")
-SHAPES = [rx for name, rx in PATTERNS if name in ("rrn", "phone", "email")]
+SHAPES = [(name, rx) for name, rx in PATTERNS if name in ("rrn", "phone", "email")]
 PROFILE_KEYS = ("labels", "aliases", "institution_suffixes", "institution_tails", "identity_labels", "keep_words",
                 "keep_term_words", "keep_item_suffixes")
 PROFILES = Path(__file__).resolve().parent / "profiles"
@@ -170,18 +170,23 @@ def kept(word, profile):
             or DATE.search(w) is not None or TERM_DATE.fullmatch(w) is not None)
 
 
-def shaped(word):
-    """An identity shape: resident number, phone, email, or a long digit run. A word that is exactly a business
-    registration number (3-2-5 digits with hyphens) is not one; it is still masked when it
-    equals an application value or follows an identity label."""
-    if any(rx.search(word) for rx in SHAPES):
-        return True
+def shape_of(word):
+    """The identity shape of a word (rrn, phone, email, or digits for a long digit run), or None. A word that is exactly
+    a business registration number (3-2-5 digits with hyphens) is not one; it is still masked when it equals an
+    application value or follows an identity label."""
+    for name, rx in SHAPES:
+        if rx.search(word):
+            return name
     if BUSINESS_NUMBER.fullmatch(clean(word)):
-        return False
-    # a date written with separators (2026-08-28) is not a long digit run; a
-    # birth date is still masked as an application value and after its label
+        return None
+    # a date written with separators (2026-08-28) is not a long digit run; a birth date is still masked as an
+    # application value and after its label
     digits = re.sub(r"[\s\-]", "", DATE.sub(" ", word))
-    return "," not in word and re.search(r"\d{8,}", digits) is not None
+    return "digits" if "," not in word and re.search(r"\d{8,}", digits) is not None else None
+
+
+def shaped(word):
+    return shape_of(word) is not None
 
 
 def spaced_institutions(words, profile):
@@ -198,20 +203,37 @@ def spaced_institutions(words, profile):
     return hidden
 
 
+def application_field(word, applicant):
+    """The application key a word equals or holds, or None."""
+    for key, value in (applicant or {}).items():
+        if value and same_value(word, value):
+            return key
+    return applicant_hit(word, applicant) or ("birth_date" if birth_hit(word, applicant) else None)
+
+
+def layer_one_reason(word, applicant):
+    """Why layer 1 masks one word outside any label segment ({"reason": "application", "field"} or {"reason":
+    "shape", "shape"}), or None."""
+    field = application_field(word, applicant)
+    if field:
+        return {"reason": "application", "field": field}
+    shape = shape_of(word)
+    return {"reason": "shape", "shape": shape} if shape else None
+
+
 def layer_one(word, applicant):
-    """Layer 1 hit of one word outside any label segment: identity shape or application data."""
-    return (shaped(word) or any(same_value(word, v) for v in (applicant or {}).values() if v)
-            or bool(applicant_hit(word, applicant)) or birth_hit(word, applicant))
+    return layer_one_reason(word, applicant) is not None
 
 
-def mask_words(words, applicant=None, profile=None, cells=None):
-    """cells, when given (a table row masked as one word sequence), is the cell number of every word: a label segment
-    ends at the second cell after its label, or at the next cell once it masked a value (so 학번 does not
+def mask_reasons(words, applicant=None, profile=None, cells=None):
+    """For every word, why it is masked ({"reason": "application" | "shape" | "label" | "institution", ...}) or None
+    when it is kept. cells, when given (a table row masked as one word sequence), is the cell number of every word: a
+    label segment ends at the second cell after its label, or at the next cell once it masked a value (so 학번 does not
     also mask 학년 4학년 in the cells after its value). Layer 1 is not touched by it."""
     profile = profile or default_profile()
     spaced = spaced_institutions(words, profile)
-    joined = mask_spans(words, applicant, MAX_LABEL_CHARS)
-    out, i, segment, masked_in, seg_cell, cur_cell = [], 0, None, 0, None, None
+    joined = span_fields(words, applicant, MAX_LABEL_CHARS)
+    out, i, segment, masked_in, seg_cell, cur_cell, label = [], 0, None, 0, None, None, None
     while i < len(words):
         if segment is not None and cells is not None and cells[i] != cur_cell:
             if masked_in or cells[i] > seg_cell + 1:
@@ -219,18 +241,19 @@ def mask_words(words, applicant=None, profile=None, cells=None):
             cur_cell = cells[i]
         if i in joined:
             # layer 1 over joined words: a value split into letters or digit groups (모 의 자 운 길, 2009 03 12)
-            out.append(MASK)
+            out.append({"reason": "application", "field": joined[i]})
             masked_in += segment is not None
             i += 1
             continue
         if i in spaced:
             # a spaced institution wins over the label its letters spell (경 기 대 학 교 holds 학 교)
-            out.append(MASK)
+            out.append({"reason": "institution"})
             i += 1
             continue
-        if layer_one(words[i], applicant):
+        one = layer_one_reason(words[i], applicant)
+        if one:
             # layer 1 comes before any label: a profile label cannot let a known value through
-            out.append(MASK)
+            out.append(one)
             masked_in += segment is not None
             i += 1
             continue
@@ -238,7 +261,8 @@ def mask_words(words, applicant=None, profile=None, cells=None):
         if span and any(layer_one(w, applicant) for w in words[i:i + span]):
             span = 0
         if span:
-            out += words[i:i + span]
+            out += [None] * span
+            label = "".join(clean(w) for w in words[i:i + span])
             if cells is not None:
                 seg_cell = cur_cell = cells[i + span - 1]
             i += span
@@ -256,28 +280,38 @@ def mask_words(words, applicant=None, profile=None, cells=None):
         second = segment == 2 or institution(word, profile)
         hidden = first or (second and not keep)
         masked_in += segment is not None
-        out.append(MASK if hidden else word)
+        out.append(None if not hidden else
+                   {"reason": "label", "label": label} if segment in (1, 2) else {"reason": "institution"})
         i += 1
     return out
 
 
-def mask_spans(words, applicant=None, width=4):
-    """Indexes of words inside a window of up to width words of one line whose joined text is exactly an applicant
-    value (spaces and - . / ignored) or a birth date of the application data (a name or a date the OCR split into
-    words). Layer 1."""
-    hidden = set()
+def mask_words(words, applicant=None, profile=None, cells=None):
+    return [MASK if r else w for w, r in zip(words, mask_reasons(words, applicant, profile, cells))]
+
+
+def span_fields(words, applicant=None, width=4):
+    """{index: application key} of words inside a window of up to width words of one line whose joined text is exactly
+    an applicant value (spaces and - . / ignored) or a birth date of the application data (a name or a date the OCR
+    split into words). Layer 1."""
+    hidden = {}
     for i in range(len(words)):
         for k in range(2, width + 1):
             part = words[i:i + k]
             if len(part) < k:
                 break
             joined = " ".join(clean(w) for w in part)
-            exact_value = any(same_value(joined, v) for v in (applicant or {}).values() if v)
+            key = next((key for key, v in (applicant or {}).items() if v and same_value(joined, v)), None)
             exact_birth = (DATE.fullmatch(joined) is not None or re.fullmatch(r"[\d\s.\-/]+", joined) is not None) \
                 and birth_hit(joined, applicant)
-            if exact_value or exact_birth:
-                hidden |= set(range(i, i + k))
+            if key or exact_birth:
+                for n in range(i, i + k):
+                    hidden.setdefault(n, key or "birth_date")
     return hidden
+
+
+def mask_spans(words, applicant=None, width=4):
+    return set(span_fields(words, applicant, width))
 
 
 def leaks_in(pages, values):

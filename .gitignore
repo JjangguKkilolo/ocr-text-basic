@@ -9,3 +9,4 @@ __pycache__/
 *.png
 out*.json
 raw*.json
+masked*.json
