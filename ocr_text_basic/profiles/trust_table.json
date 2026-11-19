@@ -1,1 +1,65 @@
-{"version": null, "bands": {}}
+{
+ "version": "2026-11-19",
+ "bands": {
+  "image|0.05-0.15": {
+   "cells": 2358,
+   "lines": 1124,
+   "pages": 67,
+   "expected_cer": 0.0519,
+   "line_error": {
+    "true": 0.0033,
+    "false": 0.4977
+   }
+  },
+  "image|<0.05": {
+   "cells": 1167,
+   "lines": 649,
+   "pages": 27,
+   "expected_cer": 0.0163,
+   "line_error": {
+    "true": 0.0,
+    "false": 0.3023
+   }
+  },
+  "image|>=0.15": {
+   "cells": 550,
+   "lines": 272,
+   "pages": 16,
+   "expected_cer": 0.098,
+   "line_error": {
+    "true": 0.0054,
+    "false": 0.6744
+   }
+  },
+  "pdf|0.05-0.15": {
+   "cells": 1307,
+   "lines": 637,
+   "pages": 38,
+   "expected_cer": 0.0407,
+   "line_error": {
+    "true": 0.0,
+    "false": 0.4432
+   }
+  },
+  "pdf|<0.05": {
+   "cells": 505,
+   "lines": 288,
+   "pages": 11,
+   "expected_cer": 0.0248,
+   "line_error": {
+    "true": 0.0,
+    "false": 0.3913
+   }
+  },
+  "pdf|>=0.15": {
+   "cells": 338,
+   "lines": 144,
+   "pages": 9,
+   "expected_cer": 0.1116,
+   "line_error": {
+    "true": 0.0,
+    "false": 0.6316
+   }
+  }
+ }
+}
