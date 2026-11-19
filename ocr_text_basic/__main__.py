@@ -25,6 +25,33 @@ def load_applicant(path):
     return {k: str(v) for k, v in data.items() if v}
 
 
+def check_document(doc, record, paths):
+    import tempfile
+    from PIL import Image
+    from ocr_text_basic.document import checked
+    from ocr_text_basic.page_signals import image_signals
+    from ocr_text_basic.second_reader import page_images, second_lines, second_pipeline
+    from ocr_text_basic.trust_table import load_table
+    sources = []
+    for path in paths:
+        if Path(path).suffix.lower() == ".pdf":
+            import pypdfium2
+            pdf = pypdfium2.PdfDocument(str(path))
+            sources += ["pdf"] * len(pdf)
+            pdf.close()
+        else:
+            sources.append("image")
+    reader = second_pipeline()
+    with tempfile.TemporaryDirectory() as tmp:
+        images = page_images(paths, Path(tmp))
+        second = [second_lines(reader, image) for image in images]
+        signals = []
+        for image in images:
+            with Image.open(image) as im:
+                signals.append(image_signals(im))
+    return checked(doc, record, second, signals, load_table(), sources)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="python -m ocr_text_basic", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -38,6 +65,9 @@ def main(argv=None):
     parser.add_argument("--models-dir", help="folder holding a downloaded PP-DocLayoutV3")
     parser.add_argument("--raw-out", help="also save the reader record (unmasked) to this path")
     parser.add_argument("--from-raw", help="build the output from a saved reader record; no model is loaded")
+    parser.add_argument("--check", action="store_true",
+                        help="add page_quality and line_checks: a PP-OCRv5 second reader and the measured trust table")
+    parser.add_argument("--images", nargs="*", help="with --from-raw and --check: the original files, in page order")
     args = parser.parse_args(argv)
     if bool(args.files) == bool(args.from_raw):
         parser.error("give either files or --from-raw")
@@ -51,6 +81,11 @@ def main(argv=None):
         if args.raw_out:
             Path(args.raw_out).write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     doc, masked = build(record, applicant)
+    if args.check:
+        paths = args.files or args.images
+        if not paths:
+            parser.error("--check needs the files (with --from-raw give them with --images)")
+        doc = check_document(doc, record, paths)
     if args.masked_out:
         Path(args.masked_out).write_text(json.dumps(masked, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     out = json.dumps(doc, ensure_ascii=False, indent=1)

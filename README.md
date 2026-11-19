@@ -111,6 +111,8 @@ Mac MLX 서버를 쓸 때는 다음과 같다.
 | `--models-dir` | 미리 받아 둔 PP-DocLayoutV3가 있는 폴더 |
 | `--raw-out` | 리더 원본 기록도 저장한다. 가리지 않은 글이 들어 있다 |
 | `--from-raw` | 저장한 리더 원본 기록에서 출력만 다시 만든다. 모델을 부르지 않는다 |
+| `--check` | 쪽마다 `page_quality`와 줄마다 `line_checks`를 더한다. 아래 신뢰 신호 절을 본다 |
+| `--images` | `--from-raw`와 `--check`를 함께 쓸 때 원본 파일을 쪽 순서대로 준다 |
 
 ## 가림
 
@@ -126,6 +128,15 @@ Mac MLX 서버를 쓸 때는 다음과 같다.
 ```
 
 신청 정보를 주지 않아도 2번과 1번의 모양 규칙은 동작한다. 다만 이름표 없이 따로 적힌 이름은 신청 정보 없이 가려지지 않는다.
+
+## 신뢰 신호 (`--check`)
+
+PP-OCRv5를 둘째 리더로 같은 쪽을 읽고 두 신호를 더한다. `text`와 가린값 파일은 바뀌지 않고 새 칸에는 글자를 쓰지 않는다. `--check`를 주지 않으면 출력은 위와 같다.
+
+- `pages[].line_checks`: `text`와 같은 길이다. 줄마다 `agree`(줄의 칸이 모두 둘째 리더 글에 있으면 true. 하나라도 없으면 false. 판정할 2자 이상 칸이 없으면 null)와 `cells`(다른 칸 번호. 0부터)와 `error_rate`(보정표의 실측 오류율)다.
+- `pages[].page_quality`: `band`(PDF 또는 이미지와 놓친 영역 비율 구간)와 `expected_cer`(그 구간 쪽들의 실측 CER)와 `signals`(해상도와 흐림과 대비와 하얗게 날아간 비율과 놓친 영역 비율과 다른 줄 비율)다.
+- `error_rate`와 `expected_cer`는 정답이 있는 가상 문서로 잰 값이다(`ocr_text_basic/profiles/trust_table.json`). 모델 점수가 아니다. 표에 없는 구간이면 null이다.
+- 쪽당 약 5초(CPU)가 더 든다.
 
 ## 알려진 한계
 

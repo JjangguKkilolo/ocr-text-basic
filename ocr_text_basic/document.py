@@ -163,3 +163,31 @@ def build(record, applicant=None, profile=None):
 
 def text_document(record, applicant=None, profile=None):
     return build(record, applicant, profile)[0]
+
+
+def checked(text_doc, record, second_pages, signals, table, sources):
+    """The text document with the trust signals added (design 2026-11-19): per page line_checks (as many as text lines:
+    agree, the differing cell indexes and the measured error rate) and page_quality (band, measured expected CER and
+    the signals). second_pages: the second reader lines of every page; signals: image_signals of every page; sources:
+    "pdf" or "image" for every page. The text is not changed and no text is written to the new fields."""
+    from ocr_text_basic.agreement import core, line_check
+    from ocr_text_basic.page_signals import missed_share
+    from ocr_text_basic.trust_table import band_key, lookup
+    plain = plain_pages(record)
+    pages = []
+    for k, page in enumerate(text_doc["pages"]):
+        lines = second_pages[k] if k < len(second_pages) else []
+        other = "".join(core(l["text"]) for l in lines)
+        vl_core = "".join(core(l) for l in plain[k])
+        checks = [line_check(l, other) for l in plain[k]]
+        missed = missed_share(lines, vl_core)
+        band = band_key(sources[k] if k < len(sources) else "image", missed)
+        judged = [c for c in checks if c["agree"] is not None]
+        differs = sum(1 for c in judged if c["agree"] is False) / len(judged) if judged else 0.0
+        entry = table.get("bands", {}).get(band)
+        quality = {"band": band, "expected_cer": entry["expected_cer"] if entry else None,
+                   "signals": dict(signals[k] if k < len(signals) else {}, missed_share=round(missed, 4),
+                                   differs_share=round(differs, 4))}
+        pages.append(dict(page, line_checks=[dict(c, error_rate=lookup(table, band, c["agree"])) for c in checks],
+                          page_quality=quality))
+    return dict(text_doc, pages=pages, checks={"second_reader": "PP-OCRv5_mobile", "table_version": table.get("version")})
