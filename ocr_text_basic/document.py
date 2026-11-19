@@ -131,6 +131,24 @@ def page_text(page, blocks, applicant, profile, masked):
     return text
 
 
+def plain_pages(record):
+    """The lines of every page as build writes them, unmasked: same order, same lines, same cells per line. For
+    comparing with a second reader inside the code only; never write these to an output."""
+    pages = []
+    for page in record["pages"]:
+        text = []
+        for block in page["blocks"]:
+            if block["label"] == "table":
+                cells = html_cells(block["content"])
+                for c in cells:
+                    c["text"] = " ".join(c["text"].split())
+                text += row_lines(cells)
+            elif block["content"]:
+                text += [" ".join(line.split()) for line in block["content"].split("\n") if line.strip()]
+        pages.append(text)
+    return pages
+
+
 def build(record, applicant=None, profile=None):
     """(text document, masked values) of one reader record. record: {"doc", "pages": [{"page", "blocks": [{"label",
     "content"}]}]} as ocr_text_basic.read writes it. applicant: the application values to mask ({"student_name": ...,
