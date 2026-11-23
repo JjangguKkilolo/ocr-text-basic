@@ -165,11 +165,13 @@ def text_document(record, applicant=None, profile=None):
     return build(record, applicant, profile)[0]
 
 
-def checked(text_doc, record, second_pages, signals, table, sources):
+def checked(text_doc, record, second_pages, signals, table, sources, second_vl_pages=None):
     """The text document with the trust signals added (design 2026-11-19): per page line_checks (as many as text lines:
     agree, the differing cell indexes and the measured error rate) and page_quality (band, measured expected CER and
     the signals). second_pages: the second reader lines of every page; signals: image_signals of every page; sources:
-    "pdf" or "image" for every page. The text is not changed and no text is written to the new fields."""
+    "pdf" or "image" for every page. second_vl_pages: the unmasked lines of a second PaddleOCR-VL read of every page
+    (two-tier flags design 2026-11-23); a page it does not hold is judged by the second reader only. The text is not
+    changed and no text is written to the new fields."""
     from ocr_text_basic.agreement import core, line_check
     from ocr_text_basic.page_signals import missed_share
     from ocr_text_basic.trust_table import band_key, lookup
@@ -179,7 +181,9 @@ def checked(text_doc, record, second_pages, signals, table, sources):
         lines = second_pages[k] if k < len(second_pages) else []
         other = "".join(core(l["text"]) for l in lines)
         vl_core = "".join(core(l) for l in plain[k])
-        checks = [line_check(l, other) for l in plain[k]]
+        second_vl = ("".join(core(l) for l in second_vl_pages[k])
+                     if second_vl_pages is not None and k < len(second_vl_pages) else None)
+        checks = [line_check(l, other, second_vl) for l in plain[k]]
         missed = missed_share(lines, vl_core)
         band = band_key(sources[k] if k < len(sources) else "image", missed)
         judged = [c for c in checks if c["agree"] is not None]
@@ -188,6 +192,10 @@ def checked(text_doc, record, second_pages, signals, table, sources):
         quality = {"band": band, "expected_cer": entry["expected_cer"] if entry else None,
                    "signals": dict(signals[k] if k < len(signals) else {}, missed_share=round(missed, 4),
                                    differs_share=round(differs, 4))}
-        pages.append(dict(page, line_checks=[dict(c, error_rate=lookup(table, band, c["agree"])) for c in checks],
+        pages.append(dict(page, line_checks=[dict(c, error_rate=lookup(table, band, c["agree"], c.get("level"))) for c in checks],
                           page_quality=quality))
-    return dict(text_doc, pages=pages, checks={"second_reader": "PP-OCRv5_mobile", "table_version": table.get("version")})
+    checks = {"second_reader": "PP-OCRv5_mobile", "table_version": table.get("version")}
+    if second_vl_pages is not None:
+        from ocr_text_basic.second_read import LABEL
+        checks["second_read"] = LABEL
+    return dict(text_doc, pages=pages, checks=checks)

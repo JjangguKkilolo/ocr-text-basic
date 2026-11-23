@@ -17,6 +17,9 @@ RECORD = {"doc": "x", "pages": [{"page": 1, "blocks": [{"label": "text", "conten
 APPLICANT = {"student_name": "모의새봄"}
 TABLE = {"version": "t1", "bands": {"image|0.05-0.15": {"cells": 900, "lines": 300, "expected_cer": 0.02,
                                                     "line_error": {"true": 0.002, "false": 0.6}}}}
+TABLE2 = {"version": "t2", "strong": {"lines": 120, "line_error": 0.9},
+          "bands": {"image|0.05-0.15": {"cells": 900, "lines": 300, "expected_cer": 0.02,
+                                        "line_error": {"true": 0.002, "false": 0.6, "weak": 0.3}}}}
 SECOND = [[{"text": "등록금 납부 확인서"}, {"text": "구분"}, {"text": "금액"}, {"text": "수업료"}, {"text": "800,000"},
            {"text": "성명"}, {"text": "모의새봄"}], []]
 SIGNALS = [{"short_side_px": 1654, "dpi": 200.0, "sharpness": 900.0, "contrast": 200.0, "clipped_share": 0.8}] * 2
@@ -59,6 +62,37 @@ class CheckOutputTest(unittest.TestCase):
         self.assertEqual(empty["line_checks"], [])
         self.assertEqual(empty["page_quality"]["signals"]["missed_share"], 0.0)
         self.assertEqual(lookup(TABLE, "image|0.05-0.15", None), None)
+
+    def doc2(self, second_vl):
+        return checked(build(RECORD, APPLICANT)[0], RECORD, SECOND, SIGNALS, TABLE2, ["image", "image"], second_vl)
+
+    def test_strong_and_weak_with_rates(self):
+        page = self.doc2([["등록금 납부 확인서", "구분 | 금액", "수업료 | 360,000", "성명 | 모의새봄"], []])["pages"][0]
+        money = page["text"].index("수업료 | 300,000")
+        self.assertEqual(page["line_checks"][money],
+                         {"agree": False, "cells": [1], "strong_cells": [1], "level": "strong", "error_rate": 0.9})
+        weak = self.doc2([["등록금 납부 확인서", "구분 | 금액", "수업료 | 300,000", "성명 | 모의새봄"], []])["pages"][0]
+        self.assertEqual(weak["line_checks"][money]["level"], "weak")
+        self.assertEqual(weak["line_checks"][money]["error_rate"], 0.3)
+        self.assertEqual(weak["line_checks"][0], {"agree": True, "cells": [], "error_rate": 0.002})
+        self.assertEqual(self.doc2([[], []])["checks"]["second_read"], "PaddleOCR-VL x1.25")
+
+    def test_missing_second_read_page_falls_back(self):
+        page = self.doc2([])["pages"][0]
+        money = page["text"].index("수업료 | 300,000")
+        self.assertEqual(page["line_checks"][money], {"agree": False, "cells": [1], "error_rate": 0.6})
+
+    def test_old_table_gives_null_rates_for_levels(self):
+        doc = checked(build(RECORD, APPLICANT)[0], RECORD, SECOND, SIGNALS, TABLE, ["image", "image"],
+                      [["수업료 | 360,000"], []])
+        money = doc["pages"][0]["text"].index("수업료 | 300,000")
+        self.assertIsNone(doc["pages"][0]["line_checks"][money]["error_rate"])
+
+    def test_level_fields_hold_no_text(self):
+        doc = self.doc2([["수업료 | 360,000 모의새봄"], []])
+        dumped = json.dumps([[p["line_checks"], p["page_quality"]] for p in doc["pages"]] + [doc["checks"]], ensure_ascii=False)
+        for word in ("모의새봄", "[가림", "수업료", "360,000"):
+            self.assertNotIn(word, dumped)
 
     def test_without_check_output_is_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:

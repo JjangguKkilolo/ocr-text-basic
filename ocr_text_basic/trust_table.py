@@ -22,8 +22,14 @@ def load_table(path=TABLE):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def lookup(table, band, agree):
+def lookup(table, band, agree, level=None):
+    """The measured share of wrong lines. level "strong" reads the pooled strong rate and "weak" the band's weak rate
+    (table 2026-11-23 on); a table without them gives None."""
     if agree is None:
         return None
+    if level == "strong":
+        return (table.get("strong") or {}).get("line_error")
     entry = table.get("bands", {}).get(band)
-    return entry["line_error"]["true" if agree else "false"] if entry else None
+    if not entry:
+        return None
+    return entry["line_error"].get("weak" if level == "weak" else ("true" if agree else "false"))

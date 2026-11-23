@@ -32,10 +32,18 @@ def cell_status(cell, other):
     return "same" if c in other else "differs"
 
 
-def line_check(line, other):
-    """{"agree": True|False|None, "cells": [indexes of differing cells]}; None when every cell is short."""
-    status = [cell_status(c, other) for c in line_cells(line)]
+def line_check(line, other, second_vl=None):
+    """{"agree": True|False|None, "cells": [indexes of differing cells]}; None when every cell is short.
+    With second_vl (the core text of a second PaddleOCR-VL read of the page; two-tier flags design 2026-11-23) a
+    differing line also gets "strong_cells" (cells that differ from both readers) and "level" ("strong" when there is
+    such a cell, else "weak"). A cell that differs only from the second read is not flagged."""
+    cells = line_cells(line)
+    status = [cell_status(c, other) for c in cells]
     differs = [k for k, s in enumerate(status) if s == "differs"]
-    if differs:
-        return {"agree": False, "cells": differs}
-    return {"agree": True if "same" in status else None, "cells": []}
+    if not differs:
+        return {"agree": True if "same" in status else None, "cells": []}
+    out = {"agree": False, "cells": differs}
+    if second_vl is not None:
+        strong = [k for k in differs if cell_status(cells[k], second_vl) == "differs"]
+        out.update(strong_cells=strong, level="strong" if strong else "weak")
+    return out

@@ -33,6 +33,17 @@ class AgreementTest(unittest.TestCase):
         self.assertEqual(line_check("수 업 료 | 3,352,000", other), {"agree": True, "cells": []})
         self.assertEqual(line_check("계 | 0", other), {"agree": None, "cells": []})
 
+    def test_line_check_levels(self):
+        pp = core("수업료 800,000 성명")
+        vl2 = core("수업료 300,000 성명")
+        self.assertEqual(line_check("수업료 | 300,000", pp, vl2),
+                         {"agree": False, "cells": [1], "strong_cells": [], "level": "weak"})
+        vl2_bad = core("수업료 360,000 성명")
+        self.assertEqual(line_check("수업료 | 300,000", pp, vl2_bad),
+                         {"agree": False, "cells": [1], "strong_cells": [1], "level": "strong"})
+        self.assertEqual(line_check("수업료 | 800,000", pp, vl2), {"agree": True, "cells": []})
+        self.assertEqual(line_check("수업료 | 300,000", pp), {"agree": False, "cells": [1]})
+
     def test_plain_pages_match_build_line_count(self):
         plain = plain_pages(RECORD)
         masked = build(RECORD, {"student_name": "모의새봄"})[0]["pages"][0]["text"]
