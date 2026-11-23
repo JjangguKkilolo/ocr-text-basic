@@ -111,7 +111,7 @@ Mac MLX 서버를 쓸 때는 다음과 같다.
 | `--models-dir` | 미리 받아 둔 PP-DocLayoutV3가 있는 폴더 |
 | `--raw-out` | 리더 원본 기록도 저장한다. 가리지 않은 글이 들어 있다 |
 | `--from-raw` | 저장한 리더 원본 기록에서 출력만 다시 만든다. 모델을 부르지 않는다 |
-| `--check` | 쪽마다 `page_quality`와 줄마다 `line_checks`를 더한다. 아래 신뢰 신호 절을 본다 |
+| `--check` | 쪽마다 `page_quality`와 줄마다 `line_checks`(강한 표시와 약한 표시 포함)를 더한다. 아래 신뢰 신호 절을 본다 |
 | `--images` | `--from-raw`와 `--check`를 함께 쓸 때 원본 파일을 쪽 순서대로 준다 |
 
 ## 가림
@@ -131,12 +131,19 @@ Mac MLX 서버를 쓸 때는 다음과 같다.
 
 ## 신뢰 신호 (`--check`)
 
-PP-OCRv5를 둘째 리더로 같은 쪽을 읽고 두 신호를 더한다. `text`와 가린값 파일은 바뀌지 않고 새 칸에는 글자를 쓰지 않는다. `--check`를 주지 않으면 출력은 위와 같다.
+같은 쪽을 두 번 더 읽어 신호를 더한다. 한 번은 PP-OCRv5 둘째 리더이고 한 번은 쪽 그림을 1.25배로 키워 PaddleOCR-VL로 다시 읽는 둘째 읽기다(PDF는 zoom 2.5. 이미지는 cubic 보간). 둘째 읽기는 비교에만 쓰고 `text`에 넣지 않는다. `text`와 가린값 파일은 바뀌지 않고 새 칸에는 글자를 쓰지 않는다. `--check`를 주지 않으면 출력은 위와 같다.
 
-- `pages[].line_checks`: `text`와 같은 길이다. 줄마다 `agree`(줄의 칸이 모두 둘째 리더 글에 있으면 true. 하나라도 없으면 false. 판정할 2자 이상 칸이 없으면 null)와 `cells`(다른 칸 번호. 0부터)와 `error_rate`(보정표의 실측 오류율)다.
+- `pages[].line_checks`: `text`와 같은 길이다. 줄마다 다음 칸이 있다.
+  - `agree`: 줄의 칸이 모두 PP 글에 있으면 true이고 하나라도 없으면 false다. 판정할 2자 이상 칸이 없으면 null이다.
+  - `cells`: PP 글과 다른 칸 번호(0부터)다.
+  - `strong_cells`와 `level`: 다름 줄에만 있다. `strong_cells`는 PP 글과 둘째 읽기 글 모두와 다른 칸 번호다. 그런 칸이 있으면 `level`은 `strong`이고 없으면 `weak`다. 둘째 읽기와만 다른 칸은 표시하지 않는다. 둘째 읽기가 없는 쪽에는 두 칸이 없다.
+  - `error_rate`: 보정표의 실측 오류율이다. 일치 줄과 약한 줄은 쪽 구간별 값이고 강한 줄은 구간을 합친 한 값이다.
 - `pages[].page_quality`: `band`(PDF 또는 이미지와 놓친 영역 비율 구간)와 `expected_cer`(그 구간 쪽들의 실측 CER)와 `signals`(해상도와 흐림과 대비와 하얗게 날아간 비율과 놓친 영역 비율과 다른 줄 비율)다.
-- `error_rate`와 `expected_cer`는 정답이 있는 가상 문서로 잰 값이다(`ocr_text_basic/profiles/trust_table.json`). 모델 점수가 아니다. 표에 없는 구간이면 null이다.
-- 쪽당 약 5초(CPU)가 더 든다.
+- `checks`: `second_reader`와 `second_read`와 `table_version`이다.
+- `error_rate`와 `expected_cer`는 정답이 있는 가상 문서로 잰 값이다(`ocr_text_basic/profiles/trust_table.json`). 모델 점수가 아니다. 표에 없는 구간이나 값이면 null이다.
+- 설계 측정에서 강한 줄은 실제 서류 30장에서 12줄 중 11줄이 실제 오류였다. 약한 줄은 3줄에서 4줄 중 1줄꼴이다. 실제 서류에서는 VL이 같은 오독을 되풀이해서 강한 줄이 잡는 틀린 줄은 일부다.
+- `--from-raw`와 함께 쓰면 둘째 읽기를 위해 `--server`와 `--server-model`도 준다.
+- 쪽당 PP 약 5초(CPU)와 둘째 읽기 약 9초(MLX)가 더 든다.
 
 ## 알려진 한계
 

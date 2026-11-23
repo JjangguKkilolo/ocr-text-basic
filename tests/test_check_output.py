@@ -5,7 +5,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from PIL import Image
+
+from ocr_text_basic.__main__ import check_document
 from ocr_text_basic.document import build, checked
 from ocr_text_basic.trust_table import band_key, lookup
 
@@ -93,6 +97,20 @@ class CheckOutputTest(unittest.TestCase):
         dumped = json.dumps([[p["line_checks"], p["page_quality"]] for p in doc["pages"]] + [doc["checks"]], ensure_ascii=False)
         for word in ("모의새봄", "[가림", "수업료", "360,000"):
             self.assertNotIn(word, dumped)
+
+    def test_check_document_passes_second_read(self):
+        record1 = dict(RECORD, pages=RECORD["pages"][:1])
+        with tempfile.TemporaryDirectory() as tmp:
+            png = Path(tmp) / "a.png"
+            Image.new("RGB", (100, 200), "white").save(png)
+            with mock.patch("ocr_text_basic.second_reader.second_pipeline", return_value=object()), \
+                 mock.patch("ocr_text_basic.second_reader.second_lines", return_value=SECOND[0]), \
+                 mock.patch("ocr_text_basic.second_read.second_read_pages", return_value=[["수업료 | 360,000"]]) as vl2:
+                doc = check_document(build(record1, APPLICANT)[0], record1, [str(png)], vl_reader="vl")
+        self.assertEqual(vl2.call_args.args[:2], ([str(png)], "vl"))
+        self.assertEqual(doc["checks"]["second_read"], "PaddleOCR-VL x1.25")
+        flagged = [c for c in doc["pages"][0]["line_checks"] if c["agree"] is False]
+        self.assertEqual(flagged[0]["level"], "strong")
 
     def test_without_check_output_is_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:

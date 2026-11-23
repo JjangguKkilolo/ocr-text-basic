@@ -25,11 +25,14 @@ def load_applicant(path):
     return {k: str(v) for k, v in data.items() if v}
 
 
-def check_document(doc, record, paths):
+def check_document(doc, record, paths, vl_reader):
+    """page_quality and line_checks: the PP-OCRv5 second reader, a second PaddleOCR-VL read of the enlarged pages with
+    vl_reader (two-tier flags design 2026-11-23) and the measured trust table."""
     import tempfile
     from PIL import Image
     from ocr_text_basic.document import checked
     from ocr_text_basic.page_signals import image_signals
+    from ocr_text_basic.second_read import second_read_pages
     from ocr_text_basic.second_reader import page_images, second_lines, second_pipeline
     from ocr_text_basic.trust_table import load_table
     sources = []
@@ -49,7 +52,8 @@ def check_document(doc, record, paths):
         for image in images:
             with Image.open(image) as im:
                 signals.append(image_signals(im))
-    return checked(doc, record, second, signals, load_table(), sources)
+        second_vl = second_read_pages(paths, vl_reader, Path(tmp) / "vl2")
+    return checked(doc, record, second, signals, load_table(), sources, second_vl)
 
 
 def main(argv=None):
@@ -66,18 +70,20 @@ def main(argv=None):
     parser.add_argument("--raw-out", help="also save the reader record (unmasked) to this path")
     parser.add_argument("--from-raw", help="build the output from a saved reader record; no model is loaded")
     parser.add_argument("--check", action="store_true",
-                        help="add page_quality and line_checks: a PP-OCRv5 second reader and the measured trust table")
+                        help="add page_quality and line_checks: PP-OCRv5 second reader, a second PaddleOCR-VL read on enlarged "
+                             "pages and the measured trust table (with --from-raw also give --server and --server-model)")
     parser.add_argument("--images", nargs="*", help="with --from-raw and --check: the original files, in page order")
     args = parser.parse_args(argv)
     if bool(args.files) == bool(args.from_raw):
         parser.error("give either files or --from-raw")
     applicant = load_applicant(args.applicant)
+    reader = None
     if args.from_raw:
         record = json.loads(Path(args.from_raw).read_text(encoding="utf-8"))
     else:
         from ocr_text_basic.read import pipeline, read_document
-        record = read_document(args.files, args.doc_id or Path(args.files[0]).stem,
-                               pipeline(args.server, args.server_model, args.models_dir))
+        reader = pipeline(args.server, args.server_model, args.models_dir)
+        record = read_document(args.files, args.doc_id or Path(args.files[0]).stem, reader)
         if args.raw_out:
             Path(args.raw_out).write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     doc, masked = build(record, applicant)
@@ -85,7 +91,10 @@ def main(argv=None):
         paths = args.files or args.images
         if not paths:
             parser.error("--check needs the files (with --from-raw give them with --images)")
-        doc = check_document(doc, record, paths)
+        if reader is None:
+            from ocr_text_basic.read import pipeline
+            reader = pipeline(args.server, args.server_model, args.models_dir)
+        doc = check_document(doc, record, paths, reader)
     if args.masked_out:
         Path(args.masked_out).write_text(json.dumps(masked, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     out = json.dumps(doc, ensure_ascii=False, indent=1)
