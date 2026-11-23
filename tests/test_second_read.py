@@ -39,6 +39,28 @@ class SecondReadTest(unittest.TestCase):
             self.assertEqual(sizes[1], (180, 360))
             self.assertEqual(sizes[2], (125, 250))
 
+    def test_odd_sizes_match_the_calibration_resize(self):
+        import cv2
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            noise = np.random.default_rng(1).integers(0, 255, (777, 1003, 3), dtype=np.uint8)
+            cv2.imwrite(str(tmp / "n.png"), noise)
+            out = cv2.imread(str(enlarged_pages([str(tmp / "n.png")], tmp / "w")[0]))
+            expected = cv2.resize(noise, (round(1003 * 1.25), round(777 * 1.25)), interpolation=cv2.INTER_CUBIC)
+            self.assertTrue(np.array_equal(out, expected))
+
+    def test_same_stems_do_not_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "a").mkdir()
+            (tmp / "b").mkdir()
+            Image.new("RGB", (100, 200), "white").save(tmp / "a" / "1.png")
+            Image.new("RGB", (300, 300), "white").save(tmp / "b" / "1.jpg")
+            out = enlarged_pages([str(tmp / "a" / "1.png"), str(tmp / "b" / "1.jpg")], tmp / "w")
+            self.assertEqual(len(set(out)), 2)
+            self.assertEqual([Image.open(p).size for p in out], [(125, 250), (375, 375)])
+
     def test_second_read_pages_uses_enlarged_images(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

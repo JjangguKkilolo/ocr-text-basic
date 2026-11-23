@@ -1,7 +1,8 @@
 """A second PaddleOCR-VL read of the same pages for the two-tier flags (design 2026-11-23). The page is enlarged to 1.25
 times the pixels the first read saw: a PDF page is drawn at zoom 2.5 (the first read draws at 2.0) and an image file
-is resized by 1.25 with cubic interpolation. The second read is only compared with the first; it never enters the
-text and is not written to any output."""
+is resized by 1.25 with cubic interpolation. Each input gets its own index prefix so two files with the same name do
+not overwrite each other. A multi-page TIFF gives its first frame only (as cv2.imread does). The second read is only
+compared with the first; it never enters the text and is not written to any output."""
 from pathlib import Path
 
 SCALE = 1.25
@@ -15,13 +16,14 @@ def enlarged_pages(paths, work_dir):
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     out = []
-    for path in paths:
+    for n, path in enumerate(paths):
         path = Path(path)
         if path.suffix.lower() == ".pdf":
             import pypdfium2
             pdf = pypdfium2.PdfDocument(str(path))
+            pdf.init_forms()  # the first read (paddlex) draws filled form fields too
             for i in range(len(pdf)):
-                target = work_dir / f"{path.stem}.p{i + 1}.png"
+                target = work_dir / f"{n:03d}_{path.stem}.p{i + 1}.png"
                 pdf[i].render(scale=PDF_ZOOM * SCALE).to_pil().convert("RGB").save(target)
                 out.append(target)
             pdf.close()
@@ -29,8 +31,12 @@ def enlarged_pages(paths, work_dir):
             image = cv2.imread(str(path))
             if image is None:
                 raise ValueError(f"cannot read image: {path}")
-            target = work_dir / f"{path.stem}.png"
-            cv2.imwrite(str(target), cv2.resize(image, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_CUBIC))
+            target = work_dir / f"{n:03d}_{path.stem}.png"
+            # an explicit size, as in the calibration read: with fx and fy OpenCV samples at exactly 1.25 instead of
+            # size over size, and the pixels differ when a side is not a multiple of 4
+            h, w = image.shape[:2]
+            size = (round(w * SCALE), round(h * SCALE))
+            cv2.imwrite(str(target), cv2.resize(image, size, interpolation=cv2.INTER_CUBIC))
             out.append(target)
     return out
 
