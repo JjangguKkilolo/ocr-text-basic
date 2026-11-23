@@ -1,5 +1,9 @@
 {
- "version": "2026-11-19",
+ "version": "2026-11-23",
+ "strong": {
+  "lines": 131,
+  "line_error": 0.7939
+ },
  "bands": {
   "image|0.05-0.15": {
    "cells": 2358,
@@ -8,7 +12,8 @@
    "expected_cer": 0.0519,
    "line_error": {
     "true": 0.0033,
-    "false": 0.4977
+    "false": 0.3881,
+    "weak": 0.2874
    }
   },
   "image|<0.05": {
@@ -18,7 +23,8 @@
    "expected_cer": 0.0163,
    "line_error": {
     "true": 0.0,
-    "false": 0.3023
+    "false": 0.2326,
+    "weak": 0.1111
    }
   },
   "image|>=0.15": {
@@ -28,7 +34,8 @@
    "expected_cer": 0.098,
    "line_error": {
     "true": 0.0054,
-    "false": 0.6744
+    "false": 0.6047,
+    "weak": 0.4808
    }
   },
   "pdf|0.05-0.15": {
@@ -38,7 +45,8 @@
    "expected_cer": 0.0407,
    "line_error": {
     "true": 0.0,
-    "false": 0.4432
+    "false": 0.4318,
+    "weak": 0.2687
    }
   },
   "pdf|<0.05": {
@@ -48,7 +56,8 @@
    "expected_cer": 0.0248,
    "line_error": {
     "true": 0.0,
-    "false": 0.3913
+    "false": 0.3913,
+    "weak": 0.1765
    }
   },
   "pdf|>=0.15": {
@@ -58,7 +67,8 @@
    "expected_cer": 0.1116,
    "line_error": {
     "true": 0.0,
-    "false": 0.6316
+    "false": 0.386,
+    "weak": 0.3077
    }
   }
  }
