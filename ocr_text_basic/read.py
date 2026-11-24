@@ -27,16 +27,19 @@ def pipeline(server=None, server_model=None, models_dir=None):
 
 
 def read_document(paths, doc_id, reader):
-    """{"doc", "pages": [{"page", "seconds", "blocks": [{"label", "content", "order"}]}]} of the files in order (a
-    PDF gives one page per PDF page; images are one page each)."""
+    """{"doc", "pages": [{"page", "seconds", "file", "file_page", "width", "height", "blocks": [{"label", "content",
+    "order", "bbox"}]}]} of the files in order (a PDF gives one page per PDF page; images are one page each). file and
+    file_page count from 1; width, height and bbox are the reader's own pixels, None when it gave none."""
     pages = []
-    for path in paths:
+    for file_number, path in enumerate(paths, 1):
         started = time.perf_counter()
         results = list(reader.predict(str(path)))
         took = time.perf_counter() - started
-        for r in results:
+        for file_page, r in enumerate(results, 1):
             res = r.json.get("res", r.json)
             pages.append({"page": len(pages) + 1, "seconds": round(took / max(1, len(results)), 2),
-                          "blocks": [{"label": b["block_label"], "content": b["block_content"], "order": b.get("block_order")}
+                          "file": file_number, "file_page": file_page, "width": res.get("width"), "height": res.get("height"),
+                          "blocks": [{"label": b["block_label"], "content": b["block_content"], "order": b.get("block_order"),
+                                      "bbox": b.get("block_bbox")}
                                      for b in res.get("parsing_res_list", [])]})
     return {"doc": doc_id, "pages": pages}
