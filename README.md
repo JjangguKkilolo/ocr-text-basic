@@ -23,7 +23,7 @@
 }
 ```
 
-- `document.doc_id`는 `--doc-id`로 준 값이다. 주지 않으면 첫 파일 이름에서 확장자를 뺀 값이다.
+- `document.doc_id`는 `--doc-id`로 준 값이다. 파일을 읽을 때는 꼭 줘야 한다. 파일 이름은 ID로 쓰지 않는다. 파일 이름에 사람 이름이 들어 있을 수 있고 출력은 LLM으로 가기 때문이다. DB 번호처럼 뜻 없는 값을 준다. 그림을 읽지 못한 오류도 경로 대신 몇 번째 파일인지만 적는다.
 - `pages[].page`는 1부터 센 쪽 번호다. PDF는 PDF 쪽마다 한 쪽이고 사진은 파일마다 한 쪽이다.
 - `pages[].text`는 읽은 순서대로 놓은 줄 목록이다.
   - 글 블록은 줄바꿈마다 한 줄이다.
@@ -86,25 +86,25 @@ python3.12 -m venv .mlx && .mlx/bin/pip install mlx-vlm==0.7.12
 ## 실행
 
 ```bash
-.venv/bin/python -m ocr_text_basic 증빙.pdf -o out.json --masked-out masked.json
+.venv/bin/python -m ocr_text_basic 증빙.pdf --doc-id d0001 -o out.json --masked-out masked.json
 ```
 
 Mac MLX 서버를 쓸 때는 다음과 같다.
 
 ```bash
-.venv/bin/python -m ocr_text_basic 증빙.pdf -o out.json --server http://127.0.0.1:8111/ --server-model <서버가 띄운 모델 이름>
+.venv/bin/python -m ocr_text_basic 증빙.pdf --doc-id d0001 -o out.json --server http://127.0.0.1:8111/ --server-model <서버가 띄운 모델 이름>
 ```
 
 여러 장 사진이 한 서류이면 쪽 순서대로 파일을 나열한다.
 
 ```bash
-.venv/bin/python -m ocr_text_basic 1쪽.jpg 2쪽.jpg --doc-id 서류1 -o out.json
+.venv/bin/python -m ocr_text_basic 1쪽.jpg 2쪽.jpg --doc-id d0002 -o out.json
 ```
 
 | 옵션 | 뜻 |
 | --- | --- |
 | `-o` | 출력 JSON 경로. 없으면 화면에 쓴다 |
-| `--doc-id` | 문서 번호 |
+| `--doc-id` | 문서 번호. 파일을 읽을 때 필수다. 파일 이름이 아닌 뜻 없는 값을 준다 |
 | `--masked-out` | 가린 값 파일 경로. 위 가린 값 파일 절을 본다 |
 | `--applicant` | 신청 정보 JSON. 아래 가림 절을 본다 |
 | `--server` `--server-model` | PaddleOCR-VL을 띄운 서버 주소와 모델 이름 |

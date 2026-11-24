@@ -23,6 +23,15 @@ class FakeVL:
 
 
 class SecondReadTest(unittest.TestCase):
+    def test_an_unreadable_image_is_named_by_its_position_not_its_file_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "모의새봄_재학증명서.png"
+            bad.write_bytes(b"not an image")
+            with self.assertRaises(ValueError) as caught:
+                enlarged_pages([str(bad)], Path(tmp) / "w")
+        self.assertIn("file 1", str(caught.exception))
+        self.assertNotIn("모의새봄", str(caught.exception))
+
     def test_enlarged_pages_sizes_and_order(self):
         import pypdfium2
         with tempfile.TemporaryDirectory() as tmp:

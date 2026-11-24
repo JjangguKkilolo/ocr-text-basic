@@ -108,6 +108,13 @@ class CommandLineTest(unittest.TestCase):
         self.assertEqual(side["document"], {"doc_id": "x"})
         self.assertIn("모의새봄", [m["value"] for m in side["masked"]])
 
+    def test_reading_files_needs_a_doc_id_so_the_file_name_never_becomes_one(self):
+        run = subprocess.run([sys.executable, "-m", "ocr_text_basic", "모의새봄_재학증명서.png"],
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 2)
+        self.assertIn("--doc-id", run.stderr)
+        self.assertNotIn("모의새봄", run.stderr + run.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

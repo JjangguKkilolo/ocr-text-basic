@@ -61,7 +61,8 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("files", nargs="*", help="PDF or image files of one document, in page order")
     parser.add_argument("-o", "--output", help="output JSON path (default: print)")
-    parser.add_argument("--doc-id", help="document id (default: the first file name without extension)")
+    parser.add_argument("--doc-id", help="document id, needed when reading files; give an id without meaning such as the "
+                        "database id, never the file name (a file name can hold a person's name and the output goes to an LLM)")
     parser.add_argument("--masked-out", help="path for the masked values (original words; keep away from any LLM)")
     parser.add_argument("--applicant", help="JSON file of application values to mask, such as student_name")
     parser.add_argument("--server", help="URL of a server serving PaddleOCR-VL (Mac: mlx_vlm.server)")
@@ -76,6 +77,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if bool(args.files) == bool(args.from_raw):
         parser.error("give either files or --from-raw")
+    if args.files and not args.doc_id:
+        parser.error("reading files needs --doc-id; the file name is not used as the id")
     applicant = load_applicant(args.applicant)
     reader = None
     if args.from_raw:
@@ -83,7 +86,7 @@ def main(argv=None):
     else:
         from ocr_text_basic.read import pipeline, read_document
         reader = pipeline(args.server, args.server_model, args.models_dir)
-        record = read_document(args.files, args.doc_id or Path(args.files[0]).stem, reader)
+        record = read_document(args.files, args.doc_id, reader)
         if args.raw_out:
             Path(args.raw_out).write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     doc, masked = build(record, applicant)

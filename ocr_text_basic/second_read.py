@@ -30,7 +30,7 @@ def enlarged_pages(paths, work_dir):
         else:
             image = cv2.imread(str(path))
             if image is None:
-                raise ValueError(f"cannot read image: {path}")
+                raise ValueError(f"cannot read image: file {n + 1}")  # not the path: a file name can hold a name
             target = work_dir / f"{n:03d}_{path.stem}.png"
             # an explicit size, as in the calibration read: with fx and fy OpenCV samples at exactly 1.25 instead of
             # size over size, and the pixels differ when a side is not a multiple of 4
