@@ -30,36 +30,45 @@ def overlap_vertically(a, b):
 
 
 def line_box(cells, inside):
-    """The union of the unique PP boxes of the cells, or None when no box is sure."""
+    """(union of the unique PP boxes of the cells, the indexes of the PP lines used), or (None, set()) when no box is
+    sure. A PP line is a candidate only when its letters are part of the letters of the whole line."""
+    own = letters("".join(cells))
     used = []
     for cell in cells:
         c = letters(cell)
         if len(c) < 2:
             continue
-        cands = [box for text, box in inside if c in text]
+        cands = [(i, box) for i, text, box in inside if c in text and text in own]
         if len(cands) == 1:
             used.append(cands[0])
-    if not used or not all(overlap_vertically(a, b) for i, a in enumerate(used) for b in used[i + 1:]):
-        return None
-    return [min(b[0] for b in used), min(b[1] for b in used), max(b[2] for b in used), max(b[3] for b in used)]
+    boxes = [b for _, b in used]
+    if not boxes or not all(overlap_vertically(a, b) for i, a in enumerate(boxes) for b in boxes[i + 1:]):
+        return None, set()
+    union = [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)]
+    return union, {i for i, _ in used}
 
 
 def page_line_boxes(record_page, second_lines=None, second_size=None):
     """One {"box", "level"} for every line of plain_lines(record_page), in the same order. The page needs width and
-    height and a bbox on every block."""
+    height and a bbox on every block. A PP line used by two lines of the page is used by none."""
     size = (record_page["width"], record_page["height"])
     block_boxes = [normalize(b["bbox"], size) if b.get("bbox") else None for b in record_page["blocks"]]
     pp = []
     if second_lines and second_size:
-        pp = [(letters(l["text"]), normalize(l["box"], second_size)) for l in second_lines]
-    out = []
-    for line, n in plain_lines(record_page):
+        pp = [(i, letters(l["text"]), normalize(l["box"], second_size)) for i, l in enumerate(second_lines)]
+    found, used_by = [], {}
+    for k, (line, n) in enumerate(plain_lines(record_page)):
         block = block_boxes[n]
-        inside = [(t, b) for t, b in pp
+        inside = [(i, t, b) for i, t, b in pp
                   if block[0] <= (b[0] + b[2]) / 2 <= block[2] and block[1] <= (b[1] + b[3]) / 2 <= block[3]]
-        box = line_box(line.split(CELL_SEP), inside) if inside else None
-        out.append({"box": box, "level": "line"} if box else {"box": block, "level": "block"})
-    return out
+        cells = line.split(CELL_SEP) if record_page["blocks"][n]["label"] == "table" else [line]
+        box, used = line_box(cells, inside) if inside else (None, set())
+        found.append((box, block))
+        for i in used:
+            used_by.setdefault(i, []).append(k)
+    shared = {k for ks in used_by.values() if len(ks) > 1 for k in ks}
+    return [{"box": box, "level": "line"} if box and k not in shared else {"box": block, "level": "block"}
+            for k, (box, block) in enumerate(found)]
 
 
 def add_boxes(text_doc, record, second_pages=None, second_sizes=None):

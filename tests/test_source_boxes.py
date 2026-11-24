@@ -61,6 +61,28 @@ class LineBoxTest(unittest.TestCase):
         self.assertEqual(plain_lines(rec), [("가나", 1), ("다라", 1), ("마 | 바", 2)])
 
 
+class GuardTest(unittest.TestCase):
+    def test_text_line_with_separator_is_one_cell(self):
+        rec = {"width": 1000, "height": 1000, "blocks": [
+            {"label": "text", "content": "가나다 | 라마바", "order": 1, "bbox": [100, 100, 900, 200]}]}
+        whole = page_line_boxes(rec, [pp("가나다 | 라마바", 200, 220, 1700, 380)], (2000, 2000))
+        self.assertEqual(whole[0]["level"], "line")
+        half = page_line_boxes(rec, [pp("가나다", 200, 220, 700, 380)], (2000, 2000))
+        self.assertEqual(half[0]["level"], "block")
+
+    def test_pp_line_with_text_of_another_line_is_not_used(self):
+        pg = page([("합계", "10"), ("발급일", "2024.03.10")])
+        lines = [pp("발급일", 220, 420, 500, 460), pp("2024.03.10", 1200, 420, 1700, 460)]
+        boxes = page_line_boxes(pg, lines, (2000, 2000))
+        self.assertEqual(boxes[1]["level"], "block")
+        self.assertEqual(boxes[2]["level"], "line")
+
+    def test_pp_line_used_by_two_lines_drops_both(self):
+        pg = page([("소계", "100원"), ("소계", "200원")])
+        boxes = page_line_boxes(pg, [pp("소계", 220, 420, 500, 460)], (2000, 2000))
+        self.assertEqual([b["level"] for b in boxes[1:]], ["block", "block"])
+
+
 class AddBoxesTest(unittest.TestCase):
     RECORD = {"doc": "x", "pages": [PAGE]}
     DOC = {"document": {"doc_id": "x"}, "pages": [{"page": 1, "text": ["a", "b", "c", "d"]}]}
