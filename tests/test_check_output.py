@@ -106,11 +106,26 @@ class CheckOutputTest(unittest.TestCase):
             with mock.patch("ocr_text_basic.second_reader.second_pipeline", return_value=object()), \
                  mock.patch("ocr_text_basic.second_reader.second_lines", return_value=SECOND[0]), \
                  mock.patch("ocr_text_basic.second_read.second_read_pages", return_value=[["수업료 | 360,000"]]) as vl2:
-                doc = check_document(build(record1, APPLICANT)[0], record1, [str(png)], vl_reader="vl")
+                doc, second, sizes = check_document(build(record1, APPLICANT)[0], record1, [str(png)], vl_reader="vl")
+        self.assertEqual(second, [SECOND[0]])
+        self.assertEqual(sizes, [(100, 200)])
         self.assertEqual(vl2.call_args.args[:2], ([str(png)], "vl"))
         self.assertEqual(doc["checks"]["second_read"], "PaddleOCR-VL x1.25")
         flagged = [c for c in doc["pages"][0]["line_checks"] if c["agree"] is False]
         self.assertEqual(flagged[0]["level"], "strong")
+
+    def test_check_with_boxes_adds_line_boxes_of_the_text_length(self):
+        from ocr_text_basic.source_boxes import add_boxes
+        rec = {"doc": "x", "pages": [{"page": 1, "file": 1, "file_page": 1, "width": 100, "height": 200, "blocks": [
+            {"label": "text", "content": "등록금 납부 확인서", "bbox": [0, 0, 100, 50]},
+            {"label": "table", "content": HTML, "bbox": [0, 60, 100, 200]}]}]}
+        sec = [[{"text": "등록금 납부 확인서", "box": [5, 5, 90, 20]}]]
+        doc = checked(build(rec, APPLICANT)[0], rec, [[{"text": "등록금 납부 확인서"}]], SIGNALS[:1], TABLE, ["image"])
+        doc = add_boxes(doc, rec, sec, [(100, 200)])
+        page = doc["pages"][0]
+        self.assertEqual(len(page["line_boxes"]), len(page["text"]))
+        self.assertTrue({b["level"] for b in page["line_boxes"]} <= {"line", "block"})
+        self.assertEqual(page["line_boxes"][0], {"box": [0.05, 0.025, 0.9, 0.1], "level": "line"})
 
     def test_without_check_output_is_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -20,6 +20,10 @@ RECORD = {"doc": "x", "pages": [
                            {"label": "table", "content": HTML}]},
     {"page": 2, "blocks": [{"label": "text", "content": "발급일 2024.03.10\n학번 : 202435982\n담당 : 모의하늘"}]}]}
 APPLICANT = {"student_name": "모의새봄"}
+RECORD_BOXES = {"doc": "x", "pages": [
+    {"page": 1, "file": 1, "file_page": 1, "width": 1000, "height": 1400, "blocks": [
+        {"label": "paragraph_title", "content": "등록금 납부 확인서", "bbox": [100, 100, 900, 160]},
+        {"label": "text", "content": "성명 모의새봄\n학기 : 2024학년도 제1학기", "bbox": [100, 200, 900, 300]}]}]}
 TOKEN = re.compile(r"\[가림#(\d+)\]")
 
 
@@ -107,6 +111,27 @@ class CommandLineTest(unittest.TestCase):
         self.assertNotIn("모의새봄", json.dumps(doc, ensure_ascii=False))
         self.assertEqual(side["document"], {"doc_id": "x"})
         self.assertIn("모의새봄", [m["value"] for m in side["masked"]])
+
+    def run_from_raw(self, record):
+        with tempfile.TemporaryDirectory() as d:
+            raw, out, app = (Path(d) / n for n in ("x.json", "out.json", "app.json"))
+            raw.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+            app.write_text(json.dumps(APPLICANT, ensure_ascii=False), encoding="utf-8")
+            subprocess.run([sys.executable, "-m", "ocr_text_basic", "--from-raw", str(raw), "-o", str(out),
+                            "--applicant", str(app)], check=True)
+            return json.loads(out.read_text(encoding="utf-8"))
+
+    def test_from_raw_with_boxes_writes_source_and_block_boxes(self):
+        doc = self.run_from_raw(RECORD_BOXES)
+        self.assertEqual(doc["pages"][0]["source"], {"file": 1, "file_page": 1})
+        self.assertEqual(len(doc["pages"][0]["line_boxes"]), len(doc["pages"][0]["text"]))
+        self.assertEqual({b["level"] for p in doc["pages"] for b in p["line_boxes"]}, {"block"})
+        self.assertNotIn("모의새봄", json.dumps(doc, ensure_ascii=False))
+
+    def test_from_raw_without_boxes_is_unchanged(self):
+        doc = self.run_from_raw(RECORD)
+        self.assertEqual(set(doc), {"document", "pages"})
+        self.assertEqual([set(p) for p in doc["pages"]], [{"page", "text"}, {"page", "text"}])
 
     def test_reading_files_needs_a_doc_id_so_the_file_name_never_becomes_one(self):
         run = subprocess.run([sys.executable, "-m", "ocr_text_basic", "모의새봄_재학증명서.png"],

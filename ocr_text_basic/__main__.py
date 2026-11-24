@@ -2,7 +2,8 @@
     [--server URL --server-model NAME]
 
 Reads the files of one document with PaddleOCR-VL and writes {"document": {"doc_id"}, "pages": [{"page", "text"}]}
-with identity values masked as numbered tokens [가림#id]. --masked-out writes the original words and the reason of
+with identity values masked as numbered tokens [가림#id]. When the record holds page sizes and block boxes every page also
+gets source {"file", "file_page"} and line_boxes (one box per text line). --masked-out writes the original words and the reason of
 every token to a separate file, for code only: do not give that file to an LLM. --from-raw builds the output from
 a reader record saved earlier with --raw-out, without loading any model.
 """
@@ -12,6 +13,7 @@ import sys
 from pathlib import Path
 
 from ocr_text_basic.document import build
+from ocr_text_basic.source_boxes import add_boxes
 from ocr_text_basic.shared import FIELDS
 
 
@@ -27,7 +29,8 @@ def load_applicant(path):
 
 def check_document(doc, record, paths, vl_reader):
     """page_quality and line_checks: the PP-OCRv5 second reader, a second PaddleOCR-VL read of the enlarged pages with
-    vl_reader (two-tier flags design 2026-11-23) and the measured trust table."""
+    vl_reader (two-tier flags design 2026-11-23) and the measured trust table. Returns (the checked document, the PP lines
+    of every page, the (width, height) of every PP page image); the last two give the line boxes."""
     import tempfile
     from PIL import Image
     from ocr_text_basic.document import checked
@@ -48,12 +51,13 @@ def check_document(doc, record, paths, vl_reader):
     with tempfile.TemporaryDirectory() as tmp:
         images = page_images(paths, Path(tmp))
         second = [second_lines(reader, image) for image in images]
-        signals = []
+        signals, sizes = [], []
         for image in images:
             with Image.open(image) as im:
                 signals.append(image_signals(im))
+                sizes.append(im.size)
         second_vl = second_read_pages(paths, vl_reader, Path(tmp) / "vl2")
-    return checked(doc, record, second, signals, load_table(), sources, second_vl)
+    return checked(doc, record, second, signals, load_table(), sources, second_vl), second, sizes
 
 
 def main(argv=None):
@@ -90,6 +94,7 @@ def main(argv=None):
         if args.raw_out:
             Path(args.raw_out).write_text(json.dumps(record, ensure_ascii=False, indent=1), encoding="utf-8")
     doc, masked = build(record, applicant)
+    second = sizes = None
     if args.check:
         paths = args.files or args.images
         if not paths:
@@ -97,7 +102,8 @@ def main(argv=None):
         if reader is None:
             from ocr_text_basic.read import pipeline
             reader = pipeline(args.server, args.server_model, args.models_dir)
-        doc = check_document(doc, record, paths, reader)
+        doc, second, sizes = check_document(doc, record, paths, reader)
+    doc = add_boxes(doc, record, second, sizes)
     if args.masked_out:
         Path(args.masked_out).write_text(json.dumps(masked, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     out = json.dumps(doc, ensure_ascii=False, indent=1)
