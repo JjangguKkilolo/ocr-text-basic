@@ -32,7 +32,7 @@ def check_document(doc, record, paths, vl_reader):
     vl_reader (two-tier flags design 2026-11-23) and the measured trust table. Returns (the checked document, the PP lines
     of every page, the (width, height) of every PP page image); the last two give the line boxes."""
     import tempfile
-    from PIL import Image
+    from PIL import Image, ImageOps
     from ocr_text_basic.document import checked
     from ocr_text_basic.page_signals import image_signals
     from ocr_text_basic.second_read import second_read_pages
@@ -55,7 +55,7 @@ def check_document(doc, record, paths, vl_reader):
         for image in images:
             with Image.open(image) as im:
                 signals.append(image_signals(im))
-                sizes.append(im.size)
+                sizes.append(ImageOps.exif_transpose(im).size)
         second_vl = second_read_pages(paths, vl_reader, Path(tmp) / "vl2")
     return checked(doc, record, second, signals, load_table(), sources, second_vl), second, sizes
 

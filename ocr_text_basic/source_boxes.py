@@ -12,11 +12,16 @@ def letters(s):
                    if unicodedata.category(ch).startswith("L") or unicodedata.category(ch) == "Nd")
 
 
+def is_number(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
 def has_boxes(record):
     pages = record.get("pages") or []
     if not pages:
         return False
-    return all(p.get("width") and p.get("height") and all(b.get("bbox") for b in p["blocks"]) for p in pages)
+    return all(p.get("width") and p.get("height") and all(b.get("bbox") for b in p["blocks"])
+               and is_number(p.get("file")) and is_number(p.get("file_page")) for p in pages)
 
 
 def normalize(box, size):

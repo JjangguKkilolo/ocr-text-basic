@@ -14,7 +14,7 @@ def table(*rows):
 
 
 def page(table_rows):
-    return {"page": 1, "file": "a.pdf", "file_page": 1, "width": 1000, "height": 1000, "blocks": [
+    return {"page": 1, "file": 1, "file_page": 1, "width": 1000, "height": 1000, "blocks": [
         {"label": "text", "content": "등록금 납부 확인서", "order": 1, "bbox": [100, 50, 900, 100]},
         {"label": "table", "content": table(*table_rows), "order": 2, "bbox": [100, 200, 900, 500]}]}
 
@@ -98,10 +98,14 @@ class AddBoxesTest(unittest.TestCase):
         old = {"doc": "x", "pages": [dict(PAGE, width=None)]}
         self.assertEqual(add_boxes(self.DOC, old), self.DOC)
 
+    def test_file_name_instead_of_number_gives_the_document_unchanged(self):
+        rec = {"doc": "x", "pages": [dict(PAGE, file="a.pdf")]}
+        self.assertEqual(add_boxes(self.DOC, rec), self.DOC)
+
     def test_adds_source_and_line_boxes_without_changing_the_input(self):
         out = add_boxes(self.DOC, self.RECORD, [[pp("등록금 납부 확인서", 220, 110, 1780, 190)]], [(2000, 2000)])
         p = out["pages"][0]
-        self.assertEqual(p["source"], {"file": "a.pdf", "file_page": 1})
+        self.assertEqual(p["source"], {"file": 1, "file_page": 1})
         self.assertEqual(len(p["line_boxes"]), len(p["text"]))
         self.assertEqual(p["line_boxes"][0]["level"], "line")
         self.assertEqual(p["text"], self.DOC["pages"][0]["text"])

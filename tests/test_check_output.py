@@ -114,6 +114,20 @@ class CheckOutputTest(unittest.TestCase):
         flagged = [c for c in doc["pages"][0]["line_checks"] if c["agree"] is False]
         self.assertEqual(flagged[0]["level"], "strong")
 
+    def test_check_document_size_applies_exif_orientation(self):
+        record1 = dict(RECORD, pages=RECORD["pages"][:1])
+        with tempfile.TemporaryDirectory() as tmp:
+            jpg = Path(tmp) / "a.jpg"
+            im = Image.new("RGB", (100, 200), "white")
+            exif = Image.Exif()
+            exif[0x0112] = 6
+            im.save(jpg, exif=exif)
+            with mock.patch("ocr_text_basic.second_reader.second_pipeline", return_value=object()), \
+                 mock.patch("ocr_text_basic.second_reader.second_lines", return_value=SECOND[0]), \
+                 mock.patch("ocr_text_basic.second_read.second_read_pages", return_value=[["수업료 | 360,000"]]):
+                _, _, sizes = check_document(build(record1, APPLICANT)[0], record1, [str(jpg)], vl_reader="vl")
+        self.assertEqual(sizes, [(200, 100)])
+
     def test_check_with_boxes_adds_line_boxes_of_the_text_length(self):
         from ocr_text_basic.source_boxes import add_boxes
         rec = {"doc": "x", "pages": [{"page": 1, "file": 1, "file_page": 1, "width": 100, "height": 200, "blocks": [
