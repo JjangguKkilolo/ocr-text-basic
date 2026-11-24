@@ -35,8 +35,10 @@ def overlap_vertically(a, b):
 
 
 def line_box(cells, inside):
-    """(union of the unique PP boxes of the cells, the indexes of the PP lines used), or (None, set()) when no box is
-    sure. A PP line is a candidate only when its letters are part of the letters of the whole line."""
+    """(union of the unique PP boxes of the cells or None when no box is sure, the indexes of the unique PP lines the
+    cells claimed). A PP line is a candidate only when its letters are part of the letters of the whole line. The
+    claimed indexes are returned even when the line falls back, so a PP line one line claimed cannot give another line
+    a box (Codex review 2026-11-24)."""
     own = letters("".join(cells))
     used = []
     for cell in cells:
@@ -46,11 +48,12 @@ def line_box(cells, inside):
         cands = [(i, box) for i, text, box in inside if c in text and text in own]
         if len(cands) == 1:
             used.append(cands[0])
+    claimed = {i for i, _ in used}
     boxes = [b for _, b in used]
     if not boxes or not all(overlap_vertically(a, b) for i, a in enumerate(boxes) for b in boxes[i + 1:]):
-        return None, set()
+        return None, claimed
     union = [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)]
-    return union, {i for i, _ in used}
+    return union, claimed
 
 
 def page_line_boxes(record_page, second_lines=None, second_size=None):

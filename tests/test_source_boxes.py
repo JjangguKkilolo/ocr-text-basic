@@ -82,6 +82,14 @@ class GuardTest(unittest.TestCase):
         boxes = page_line_boxes(pg, [pp("소계", 220, 420, 500, 460)], (2000, 2000))
         self.assertEqual([b["level"] for b in boxes[1:]], ["block", "block"])
 
+    def test_pp_lines_claimed_by_a_line_that_fell_back_still_count_as_used(self):
+        # Codex review 2026-11-24: the first row falls back (its two PP lines do not overlap vertically) but its
+        # unique PP lines still count, so the rows sharing them fall back too
+        pg = page([("소계", "100원"), ("소계", "200원"), ("기타", "100원")])
+        lines = [pp("소계", 120, 220, 250, 240), pp("기타", 120, 400, 250, 430), pp("100원", 600, 400, 850, 430)]
+        boxes = page_line_boxes(pg, lines, (1000, 1000))
+        self.assertEqual([b["level"] for b in boxes[1:]], ["block", "block", "block"])
+
 
 class AddBoxesTest(unittest.TestCase):
     RECORD = {"doc": "x", "pages": [PAGE]}
